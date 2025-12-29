@@ -6,3 +6,8 @@ pyscreenshot==3.1
 google-genai
 pillow
 python-dotenv
+torch 
+torch-vision
+numpy
+matplotlib
+scipy
