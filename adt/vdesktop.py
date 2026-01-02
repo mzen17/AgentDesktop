@@ -1,7 +1,8 @@
 import tkinter as tk
 import random
 import math
-import pyscreenshot as ImageGrab
+import mss
+import mss.tools
 
 class VDesktop(tk.Tk):
     def __init__(self, agent):
@@ -31,7 +32,7 @@ class VDesktop(tk.Tk):
                 if all(math.hypot(x - x2, y - y2) > min_dist for x2, y2 in positions):
                     positions.append((x, y))
                     break
-            btn = tk.Button(self.canvas, bg=color, width=4, height=2)
+            btn = tk.Frame(self.canvas, bg=color, width=40, height=30, bd=2, relief="raised")
             win_id = self.canvas.create_window(x, y, window=btn)
             self.button_data.append((win_id, color))
 
@@ -74,6 +75,12 @@ class VDesktop(tk.Tk):
         self.entry.pack(side="left", padx=5, pady=5)
         # bind Enter key to on_submit
         self.entry.bind("<Return>", self.on_submit)
+
+        # Mode selection
+        self.mode_var = tk.StringVar(value="Gemini")
+        modes = ["Gemini", "ImageShot", "Hybrid"]
+        mode_menu = tk.OptionMenu(iv, self.mode_var, *modes)
+        mode_menu.pack(side="left", padx=5)
 
         btn_submit = tk.Button(iv, text="Submit", width=8, command=self.on_submit)
         btn_back   = tk.Button(iv, text="Manual Mode", width=8, command=self.show_controls)
@@ -126,10 +133,14 @@ class VDesktop(tk.Tk):
         self.update_idletasks()
         x1 = self.winfo_rootx()
         y1 = self.winfo_rooty()
-        x2 = x1 + self.winfo_width()
-        y2 = y1 + self.winfo_height()
-        img = ImageGrab.grab(bbox=(x1, y1, x2, y2))
-        img.save("img/tk_window.png")
+        width = self.winfo_width()
+        height = self.winfo_height()
+
+        with mss.mss() as sct:
+            monitor = {"top": y1, "left": x1, "width": width, "height": height}
+            output = "img/tk_window.png"
+            sct_img = sct.grab(monitor)
+            mss.tools.to_png(sct_img.rgb, sct_img.size, output=output)
 
     def on_submit(self, event=None):
         text = self.entry.get()
@@ -138,8 +149,27 @@ class VDesktop(tk.Tk):
         self.screenshot()
 
         if text != "":
-        
-            output = self.agent.ask(text, "img/tk_window.png")
+            # Clear previous debug markers
+            self.canvas.delete("debug_marker")
+            
+            output, points = self.agent.ask(text, "img/tk_window.png", mode=self.mode_var.get())
+            
+            # Draw debug points
+            cx, cy = self.canvas.coords(self.cursor)
+            # coords returns center because it's a window object? No, create_window coords are center.
+            # Wait, create_window coords are where the window is placed.
+            # Let's verify. Yes, create_window(x, y, ...) places center at x,y by default.
+            
+            for p in points:
+                dx, dy = p['dx'], p['dy']
+                tx, ty = cx + dx, cy + dy
+                color = p['color']
+                # Draw a small circle
+                r = 5
+                self.canvas.create_oval(tx-r, ty-r, tx+r, ty+r, fill=color, outline="white", width=2, tags="debug_marker")
+                # Draw label
+                self.canvas.create_text(tx, ty-15, text=p['label'], fill=color, font=("Arial", 8), tags="debug_marker")
+
             debug = self.agent.consult(text, "img/tk_window.png")
             print(f"Response: {output} | DEBUG: {debug}")
             print(output)
